@@ -1,40 +1,43 @@
 #!/bin/bash
 
-# Function to prompt for user input
-function prompt_user() {
-    read -p "$1: " val
-    echo $val
-}
+# Set docker container and image names
+CONTAINER_NAME="azure-openai-proxy"
+IMAGE_NAME="ishadows/azure-openai-proxy:latest"
 
-# Check if the docker container exists
-if [ $(docker ps -a -f name=azure-openai-proxy | grep -w azure-openai-proxy | wc -l) -eq 1 ]
-then
-    echo "Removing existing azure-openai-proxy container"
-    docker rm -f azure-openai-proxy
+# Check if container exists
+if [ $(docker ps -a -f name=$CONTAINER_NAME | grep -w $CONTAINER_NAME | wc -l) -eq 1 ]; then
+  echo "Removing existing $CONTAINER_NAME container"
+  docker rm -f $CONTAINER_NAME
 fi
 
-# Check if the docker image exists
-if [ $(docker images -q ishadows/azure-openai-proxy:latest | wc -l) -eq 1 ]
-then
-    echo "Removing existing ishadows/azure-openai-proxy image"
-    docker rmi ishadows/azure-openai-proxy:latest
+# Check if image exists
+if [ $(docker images -f reference=$IMAGE_NAME | grep -w $IMAGE_NAME | wc -l) -eq 1 ]; then
+  echo "Removing existing $IMAGE_NAME image"
+  docker rmi $IMAGE_NAME
 fi
 
-# Prompt for user inputs
-ENDPOINT=$(prompt_user "Enter AZURE_OPENAI_ENDPOINT")
-MAPPER_35=$(prompt_user "Enter MAPPER for gpt-3.5-turbo-0301 (leave empty to skip)")
-MAPPER_4=$(prompt_user "Enter MAPPER for gpt-4 (leave empty to skip)")
+# Enter the Azure OpenAI endpoint
+read -p "Enter Azure OpenAI resource name: " resource_name
+AZURE_OPENAI_ENDPOINT="https://$resource_name.openai.azure.com/"
 
-# Prepare environment variables
-ENV_VARS="--env AZURE_OPENAI_ENDPOINT=${ENDPOINT}"
-if [ ! -z "$MAPPER_35" ]
-then
-    ENV_VARS="${ENV_VARS} --env AZURE_OPENAI_MODEL_MAPPER_35=${MAPPER_35}"
+# Enter the model mapper values
+read -p "Enter MAPPER for gpt-3.5-turbo-0301 (leave empty to skip): " mapper_gpt35
+read -p "Enter MAPPER for gpt-4 (leave empty to skip): " mapper_gpt4
+
+# Create the model mapper string
+MODEL_MAPPER=""
+if [ ! -z "$mapper_gpt35" ]; then
+  MODEL_MAPPER="gpt-3.5-turbo-0301=$mapper_gpt35"
 fi
-if [ ! -z "$MAPPER_4" ]
-then
-    ENV_VARS="${ENV_VARS} --env AZURE_OPENAI_MODEL_MAPPER_4=${MAPPER_4}"
+if [ ! -z "$mapper_gpt4" ]; then
+  if [ ! -z "$MODEL_MAPPER" ]; then
+    MODEL_MAPPER="$MODEL_MAPPER,"
+  fi
+  MODEL_MAPPER="$MODEL_MAPPER gpt-4=$mapper_gpt4"
 fi
 
-# Run the Docker container
-sudo docker run -d -p 8080:8080 --name=azure-openai-proxy ${ENV_VARS} ishadows/azure-openai-proxy:latest
+# Run the docker container
+docker run -d -p 8080:8080 --name=$CONTAINER_NAME \
+  --env AZURE_OPENAI_ENDPOINT=$AZURE_OPENAI_ENDPOINT \
+  --env AZURE_OPENAI_MODEL_MAPPER=$MODEL_MAPPER \
+  $IMAGE_NAME
